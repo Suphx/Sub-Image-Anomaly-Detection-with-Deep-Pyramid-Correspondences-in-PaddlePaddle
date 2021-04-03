@@ -10,6 +10,7 @@
 import argparse
 import numpy as np
 import os
+import pickle
 
 from tqdm import tqdm
 from collections import OrderedDict
@@ -55,6 +56,8 @@ def main():
     model.layer3[-1].register_forward_post_hook(hook)
     model.avgpool.register_forward_post_hook(hook)
 
+    os.makedirs(os.path.join(args.save_path, 'temp'), exist_ok=True)
+
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
     fig_img_rocauc = ax[0]
     fig_pixel_rocauc = ax[1]
@@ -72,15 +75,30 @@ def main():
         test_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', []), ('avgpool', [])])
 
         # extract train set features
-        for (x, y, mask) in tqdm(train_dataloader, '| feature extraction | train | %s |' % class_name):
-            with paddle.no_grad():
-                pred = model(x)
-            for k, v in zip(train_outputs.keys(), outputs):
-                train_outputs[k].append(v)
-            # initialize hook outputs
-            outputs = []
-        for k, v in train_outputs.items():
-            train_outputs[k] = paddle.concat(v, 0)
+        train_feature_filepath = os.path.join(args.save_path, 'temp', 'train_%s.pkl' % class_name)
+        if not os.path.exists(train_feature_filepath):
+            # extract train set features
+            for (x, y, mask) in tqdm(train_dataloader, '| feature extraction | train | %s |' % class_name):
+                with paddle.no_grad():
+                    pred = model(x)
+                for k, v in zip(train_outputs.keys(), outputs):
+                    train_outputs[k].append(v)
+                # initialize hook outputs
+                outputs = []
+            # transfer to np.array in order to save by pickle
+            for k, v in train_outputs.items():
+                train_outputs[k] = paddle.concat(v, 0).numpy()
+            with open(train_feature_filepath, 'wb') as f:
+                pickle.dump(train_outputs, f)
+            # transfer back to paddle.Tensor() in order to continue to compute in test stage
+            for k, v in train_outputs.items():
+                train_outputs[k] = paddle.to_tensor(v)
+        else:
+            print('load train set feature from: %s' % train_feature_filepath)
+            with open(train_feature_filepath, 'rb') as f:
+                train_outputs = pickle.load(f)
+            for k, v in train_outputs.items():
+                train_outputs[k] = paddle.to_tensor(v)
 
         gt_list = []
         gt_mask_list = []

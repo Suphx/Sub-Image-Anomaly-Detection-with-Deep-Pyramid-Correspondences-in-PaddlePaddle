@@ -28,4 +28,4 @@ It is fast, robust and achieves SOTA on `MVTec AD` dataset.
 
 
 ## Bug
-* Pickle 不能序列化Paddle Tensor，特征学习时无法保存feature map。
+~~ * Pickle 不能序列化Paddle Tensor，特征学习时无法保存feature map。~~ (fixed in 2021-04-02)
